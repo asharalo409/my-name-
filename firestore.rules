@@ -1,0 +1,411 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function hasValidTimestampsOnCreate(data) {
+      return data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function hasValidTimestampsOnUpdate(data, prev) {
+      return data.createdAt == prev.createdAt &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function optStr(data, field, maxLen) {
+      return !(field in data) || data[field] == null || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function optNum(data, field, minVal) {
+      return !(field in data) || data[field] == null || (data[field] is number && data[field] >= minVal);
+    }
+
+    function isValidOrgSettings(data) {
+      return data.keys().hasAll(['orgName', 'slogan', 'defaultMonthlyFee', 'goalAmount', 'themePalette', 'darkMode', 'language', 'district', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['orgName', 'slogan', 'hotline', 'bankDetails', 'defaultMonthlyFee', 'goalAmount', 'themePalette', 'darkMode', 'language', 'district', 'createdAt', 'updatedAt']) &&
+             data.orgName is string && data.orgName.size() >= 1 && data.orgName.size() <= 120 &&
+             data.slogan is string && data.slogan.size() <= 200 &&
+             optStr(data, 'hotline', 40) &&
+             optStr(data, 'bankDetails', 1000) &&
+             data.defaultMonthlyFee is number && data.defaultMonthlyFee >= 0 &&
+             data.goalAmount is number && data.goalAmount >= 0 &&
+             data.themePalette in ['green', 'blue', 'violet', 'rose', 'orange', 'teal', 'maroon'] &&
+             data.darkMode is bool &&
+             data.language in ['bn', 'en'] &&
+             data.district is string && data.district.size() >= 1 && data.district.size() <= 80;
+    }
+
+    function isValidFund(data) {
+      return data.keys().hasAll(['name', 'targetAmount', 'isActive', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'description', 'targetAmount', 'isActive', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             optStr(data, 'description', 500) &&
+             data.targetAmount is number && data.targetAmount >= 0 &&
+             data.isActive is bool;
+    }
+
+    function isValidMember(data) {
+      return data.keys().hasAll(['fullName', 'memberCode', 'role', 'isActive', 'isBloodDonor', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['fullName', 'memberCode', 'phone', 'email', 'bloodGroup', 'district', 'upazila', 'role', 'occupation', 'monthlyFeeOverride', 'openingBalance', 'isActive', 'isBloodDonor', 'lastDonatedDate', 'joinedAt', 'notes', 'createdAt', 'updatedAt']) &&
+             data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 120 &&
+             data.memberCode is string && data.memberCode.size() >= 1 && data.memberCode.size() <= 40 &&
+             optStr(data, 'phone', 40) &&
+             optStr(data, 'email', 160) &&
+             optStr(data, 'bloodGroup', 10) &&
+             optStr(data, 'district', 80) &&
+             optStr(data, 'upazila', 80) &&
+             data.role is string && data.role.size() >= 1 && data.role.size() <= 60 &&
+             optStr(data, 'occupation', 120) &&
+             optNum(data, 'monthlyFeeOverride', 0) &&
+             optNum(data, 'openingBalance', 0) &&
+             data.isActive is bool &&
+             data.isBloodDonor is bool &&
+             optStr(data, 'lastDonatedDate', 40) &&
+             optStr(data, 'joinedAt', 40) &&
+             optStr(data, 'notes', 1000);
+    }
+
+    function isValidDonation(data) {
+      return data.keys().hasAll(['donorName', 'fundId', 'fundName', 'amount', 'category', 'method', 'donatedOn', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['donorName', 'memberId', 'fundId', 'fundName', 'amount', 'category', 'method', 'trxId', 'donatedOn', 'notes', 'status', 'createdAt', 'updatedAt']) &&
+             data.donorName is string && data.donorName.size() >= 1 && data.donorName.size() <= 120 &&
+             optStr(data, 'memberId', 128) &&
+             data.fundId is string && data.fundId.size() <= 128 &&
+             data.fundName is string && data.fundName.size() >= 1 && data.fundName.size() <= 120 &&
+             data.amount is number && data.amount > 0 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 80 &&
+             data.method is string && data.method.size() >= 1 && data.method.size() <= 60 &&
+             optStr(data, 'trxId', 80) &&
+             data.donatedOn is string && data.donatedOn.size() >= 1 && data.donatedOn.size() <= 40 &&
+             optStr(data, 'notes', 500) &&
+             data.status in ['verified', 'pending', 'rejected'];
+    }
+
+    function isValidExpense(data) {
+      return data.keys().hasAll(['title', 'fundId', 'fundName', 'amount', 'category', 'spentOn', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['title', 'fundId', 'fundName', 'amount', 'category', 'spentOn', 'recipient', 'notes', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+             data.fundId is string && data.fundId.size() <= 128 &&
+             data.fundName is string && data.fundName.size() >= 1 && data.fundName.size() <= 120 &&
+             data.amount is number && data.amount > 0 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 80 &&
+             data.spentOn is string && data.spentOn.size() >= 1 && data.spentOn.size() <= 40 &&
+             optStr(data, 'recipient', 120) &&
+             optStr(data, 'notes', 500);
+    }
+
+    function isValidMonthlyFee(data) {
+      return data.keys().hasAll(['memberId', 'memberName', 'year', 'month', 'amount', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['memberId', 'memberName', 'year', 'month', 'amount', 'paidDate', 'method', 'status', 'notes', 'createdAt', 'updatedAt']) &&
+             data.memberId is string && data.memberId.size() >= 1 && data.memberId.size() <= 128 &&
+             data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 120 &&
+             data.year is int && data.year >= 2000 && data.year <= 2100 &&
+             data.month is int && data.month >= 1 && data.month <= 12 &&
+             data.amount is number && data.amount >= 0 &&
+             optStr(data, 'paidDate', 40) &&
+             optStr(data, 'method', 60) &&
+             data.status in ['paid', 'due'] &&
+             optStr(data, 'notes', 500);
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['title', 'area', 'goalAmount', 'spentAmount', 'beneficiaries', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['title', 'area', 'fundId', 'fundName', 'goalAmount', 'spentAmount', 'beneficiaries', 'status', 'description', 'bannerKey', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+             data.area is string && data.area.size() >= 1 && data.area.size() <= 120 &&
+             optStr(data, 'fundId', 128) &&
+             optStr(data, 'fundName', 120) &&
+             data.goalAmount is number && data.goalAmount >= 0 &&
+             data.spentAmount is number && data.spentAmount >= 0 &&
+             data.beneficiaries is int && data.beneficiaries >= 0 &&
+             data.status in ['active', 'completed', 'planned'] &&
+             optStr(data, 'description', 2000) &&
+             optStr(data, 'bannerKey', 60);
+    }
+
+    function isValidFieldReport(data) {
+      return data.keys().hasAll(['title', 'location', 'summary', 'beneficiaryCount', 'amountSpent', 'reportDate', 'verified', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['title', 'projectId', 'projectTitle', 'location', 'summary', 'beneficiaryCount', 'amountSpent', 'reportDate', 'verified', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+             optStr(data, 'projectId', 128) &&
+             optStr(data, 'projectTitle', 160) &&
+             data.location is string && data.location.size() >= 1 && data.location.size() <= 120 &&
+             data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 2000 &&
+             data.beneficiaryCount is int && data.beneficiaryCount >= 0 &&
+             data.amountSpent is number && data.amountSpent >= 0 &&
+             data.reportDate is string && data.reportDate.size() >= 1 && data.reportDate.size() <= 40 &&
+             data.verified is bool;
+    }
+
+    function isValidBloodDonor(data) {
+      return data.keys().hasAll(['name', 'phone', 'bloodGroup', 'district', 'available', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'phone', 'bloodGroup', 'district', 'upazila', 'lastDonatedDate', 'available', 'notes', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.phone is string && data.phone.size() >= 3 && data.phone.size() <= 40 &&
+             data.bloodGroup in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] &&
+             data.district is string && data.district.size() >= 1 && data.district.size() <= 80 &&
+             optStr(data, 'upazila', 80) &&
+             optStr(data, 'lastDonatedDate', 40) &&
+             data.available is bool &&
+             optStr(data, 'notes', 500);
+    }
+
+    function isValidBloodRequest(data) {
+      return data.keys().hasAll(['bloodGroup', 'hospital', 'contact', 'patientProblem', 'applicantName', 'urgent', 'isManaged', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['bloodGroup', 'hospital', 'district', 'upazila', 'contact', 'patientProblem', 'applicantName', 'neededBy', 'urgent', 'isManaged', 'notes', 'createdAt', 'updatedAt']) &&
+             data.bloodGroup in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] &&
+             data.hospital is string && data.hospital.size() >= 1 && data.hospital.size() <= 160 &&
+             optStr(data, 'district', 80) &&
+             optStr(data, 'upazila', 80) &&
+             data.contact is string && data.contact.size() >= 3 && data.contact.size() <= 40 &&
+             data.patientProblem is string && data.patientProblem.size() >= 1 && data.patientProblem.size() <= 200 &&
+             data.applicantName is string && data.applicantName.size() >= 1 && data.applicantName.size() <= 120 &&
+             optStr(data, 'neededBy', 60) &&
+             data.urgent is bool &&
+             data.isManaged is bool &&
+             optStr(data, 'notes', 500);
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll(['title', 'eventDate', 'location', 'category', 'rsvpCount', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['title', 'eventDate', 'eventTime', 'location', 'category', 'description', 'rsvpCount', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+             data.eventDate is string && data.eventDate.size() >= 1 && data.eventDate.size() <= 40 &&
+             optStr(data, 'eventTime', 40) &&
+             data.location is string && data.location.size() >= 1 && data.location.size() <= 160 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 80 &&
+             optStr(data, 'description', 1000) &&
+             data.rsvpCount is int && data.rsvpCount >= 0;
+    }
+
+    function isValidPoll(data) {
+      return data.keys().hasAll(['question', 'options', 'votes', 'selectedOption', 'isOpen', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['question', 'options', 'votes', 'selectedOption', 'isOpen', 'createdAt', 'updatedAt']) &&
+             data.question is string && data.question.size() >= 1 && data.question.size() <= 240 &&
+             data.options is list && data.options.size() >= 2 && data.options.size() <= 10 &&
+             data.options[0] is string &&
+             data.votes is list && data.votes.size() == data.options.size() &&
+             data.votes[0] is int &&
+             data.selectedOption is int && data.selectedOption >= -1 && data.selectedOption < data.options.size() &&
+             data.isOpen is bool;
+    }
+
+    function isValidNotice(data) {
+      return data.keys().hasAll(['title', 'body', 'isUrgent', 'authorName', 'reactions', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['title', 'body', 'isUrgent', 'authorName', 'reactions', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 2000 &&
+             data.isUrgent is bool &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120 &&
+             data.reactions is int && data.reactions >= 0;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['channel', 'senderName', 'body', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['channel', 'senderName', 'receiverName', 'body', 'createdAt', 'updatedAt']) &&
+             data.channel is string && data.channel.size() >= 1 && data.channel.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 120 &&
+             optStr(data, 'receiverName', 120) &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 2000;
+    }
+
+    function isValidAiConversation(data) {
+      return data.keys().hasAll(['title', 'language', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['title', 'language', 'scope', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.language in ['bn', 'en'] &&
+             optStr(data, 'scope', 80);
+    }
+
+    function isValidAiChatMessage(data) {
+      return data.keys().hasAll(['role', 'content', 'actionStatus', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['role', 'content', 'actionStatus', 'actionSummary', 'createdAt', 'updatedAt']) &&
+             data.role in ['user', 'assistant', 'system'] &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 16000 &&
+             data.actionStatus in ['none', 'pending', 'executed', 'cancelled'] &&
+             optStr(data, 'actionSummary', 1000);
+    }
+
+    function isValidIslamicJournal(data) {
+      return data.keys().hasAll(['dateKey', 'prayersCompleted', 'quranMinutes', 'zikrCount', 'charityDone', 'amolItems', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['dateKey', 'prayersCompleted', 'quranMinutes', 'zikrCount', 'charityDone', 'amolItems', 'createdAt', 'updatedAt']) &&
+             data.dateKey is string && data.dateKey.size() >= 8 && data.dateKey.size() <= 20 &&
+             data.prayersCompleted is int && data.prayersCompleted >= 0 && data.prayersCompleted <= 5 &&
+             data.quranMinutes is int && data.quranMinutes >= 0 && data.quranMinutes <= 1440 &&
+             data.zikrCount is int && data.zikrCount >= 0 && data.zikrCount <= 1000000 &&
+             data.charityDone is bool &&
+             data.amolItems is list && data.amolItems.size() <= 12 &&
+             (data.amolItems.size() == 0 || data.amolItems[0] is string);
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create, update, delete: if false;
+
+      match /settings/{settingId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(settingId);
+        allow create: if isOwner(userId) && isValidId(settingId) && isValidOrgSettings(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(settingId) && isValidOrgSettings(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(settingId);
+      }
+
+      match /funds/{fundId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(fundId);
+        allow create: if isOwner(userId) && isValidId(fundId) && isValidFund(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(fundId) && isValidFund(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(fundId);
+      }
+
+      match /members/{memberId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(memberId);
+        allow create: if isOwner(userId) && isValidId(memberId) && isValidMember(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(memberId) && isValidMember(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(memberId);
+      }
+
+      match /donations/{donationId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(donationId);
+        allow create: if isOwner(userId) && isValidId(donationId) && isValidDonation(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(donationId) && isValidDonation(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(donationId);
+      }
+
+      match /expenses/{expenseId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(expenseId);
+        allow create: if isOwner(userId) && isValidId(expenseId) && isValidExpense(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(expenseId) && isValidExpense(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(expenseId);
+      }
+
+      match /monthlyFees/{feeId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(feeId);
+        allow create: if isOwner(userId) && isValidId(feeId) && isValidMonthlyFee(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(feeId) && isValidMonthlyFee(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(feeId);
+      }
+
+      match /projects/{projectId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(projectId);
+        allow create: if isOwner(userId) && isValidId(projectId) && isValidProject(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(projectId) && isValidProject(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(projectId);
+      }
+
+      match /fieldReports/{reportId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(reportId);
+        allow create: if isOwner(userId) && isValidId(reportId) && isValidFieldReport(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(reportId) && isValidFieldReport(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(reportId);
+      }
+
+      match /bloodDonors/{donorId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(donorId);
+        allow create: if isOwner(userId) && isValidId(donorId) && isValidBloodDonor(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(donorId) && isValidBloodDonor(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(donorId);
+      }
+
+      match /bloodRequests/{requestId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(requestId);
+        allow create: if isOwner(userId) && isValidId(requestId) && isValidBloodRequest(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(requestId) && isValidBloodRequest(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(requestId);
+      }
+
+      match /events/{eventId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(eventId);
+        allow create: if isOwner(userId) && isValidId(eventId) && isValidEvent(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(eventId) && isValidEvent(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(eventId);
+      }
+
+      match /polls/{pollId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(pollId);
+        allow create: if isOwner(userId) && isValidId(pollId) && isValidPoll(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(pollId) && isValidPoll(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(pollId);
+      }
+
+      match /notices/{noticeId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(noticeId);
+        allow create: if isOwner(userId) && isValidId(noticeId) && isValidNotice(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(noticeId) && isValidNotice(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(noticeId);
+      }
+
+      match /messages/{messageId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(messageId);
+        allow create: if isOwner(userId) && isValidId(messageId) && isValidChatMessage(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(messageId) && isValidChatMessage(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(messageId);
+      }
+
+      match /aiConversations/{conversationId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(conversationId);
+        allow create: if isOwner(userId) && isValidId(conversationId) && isValidAiConversation(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(conversationId) && isValidAiConversation(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(conversationId);
+
+        match /messages/{msgId} {
+          allow list: if isOwner(userId) && isValidId(conversationId);
+          allow get: if isOwner(userId) && isValidId(conversationId) && isValidId(msgId);
+          allow create: if isOwner(userId) && isValidId(conversationId) && isValidId(msgId) && isValidAiChatMessage(incoming()) && hasValidTimestampsOnCreate(incoming());
+          allow update: if isOwner(userId) && isValidId(conversationId) && isValidId(msgId) && isValidAiChatMessage(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+          allow delete: if isOwner(userId) && isValidId(conversationId) && isValidId(msgId);
+        }
+      }
+
+      match /islamicJournal/{entryId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(entryId);
+        allow create: if isOwner(userId) && isValidId(entryId) && isValidIslamicJournal(incoming()) && hasValidTimestampsOnCreate(incoming());
+        allow update: if isOwner(userId) && isValidId(entryId) && isValidIslamicJournal(incoming()) && hasValidTimestampsOnUpdate(incoming(), existing());
+        allow delete: if isOwner(userId) && isValidId(entryId);
+      }
+    }
+  }
+}

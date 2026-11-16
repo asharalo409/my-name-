@@ -1,0 +1,6 @@
+{
+  "name": "মানবসেবা ফাউন্ডেশন",
+  "description": "মানবসেবা ফাউন্ডেশন ও মানবসেবা AI: স্বচ্ছ হিসাব, হাতে লেখা খাতা রিডার, সদস্য ব্যবস্থাপনা, জরুরি রক্তের আবেদন, ত্রাণ ও সমাজকল্যাণ।",
+  "requestFramePermissions": ["microphone", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
