@@ -13,7 +13,8 @@ Native Android application built with **Kotlin**, **Jetpack Compose (Material De
 
 ## Building & Downloading the APK (GitHub Actions)
 
-1. Push this repository to GitHub (triggers `.github/workflows/build-apk.yml` automatically on any push or via **Actions → Build Android APK → Run workflow**).
-2. Open the **Actions** tab in your GitHub repository and select the latest workflow run.
-3. Download **`manobseba-foundation-debug-apk`** from the **Artifacts** section to get `app-debug.apk`.
+1. In GitHub, open **Settings → Secrets and variables → Actions → New repository secret** and create **`GOOGLE_SERVICES_JSON`** containing the JSON from `app/google-services.json` (excluded automatically on GitHub push for security).
+2. Push this repository to GitHub (triggers `.github/workflows/build-apk.yml` automatically on any push or via **Actions → Build Android APK → Run workflow**).
+3. Open the **Actions** tab in your GitHub repository and select the latest workflow run.
+4. Download **`manobseba-foundation-debug-apk`** from the **Artifacts** section to get `app-debug.apk`.
 
